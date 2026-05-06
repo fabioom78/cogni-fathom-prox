@@ -411,4 +411,61 @@ function restartPipeline(){
   document.getElementById('ps1').classList.add('active');goPane(1);renderPills();
 }
 
-const saved=localStorage.getItem('cf_apikey');if(saved)document.getElementById('apikey').v
+const saved=localStorage.getItem('cf_apikey');if(saved)document.getElementById('apikey').value=saved;
+loadStorage();renderPills();
+</script>
+</body>
+</html>`;
+
+http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  if (req.method === 'GET' && (req.url === '/' || req.url === '')) {
+    res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+    res.end(HTML);
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const {key, payload} = JSON.parse(body);
+        const data = JSON.stringify(payload);
+        const options = {
+          hostname: 'api.anthropic.com',
+          path: '/v1/messages',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data),
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01'
+          }
+        };
+        const proxy = https.request(options, r => {
+          let resp = '';
+          r.on('data', c => resp += c);
+          r.on('end', () => {
+            res.writeHead(r.statusCode, {'Content-Type': 'application/json'});
+            res.end(resp);
+          });
+        });
+        proxy.on('error', e => { res.writeHead(500); res.end(JSON.stringify({error: {message: e.message}})); });
+        proxy.write(data);
+        proxy.end();
+      } catch(e) {
+        res.writeHead(400);
+        res.end(JSON.stringify({error: {message: e.message}}));
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404); res.end('Not found');
+}).listen(PORT, () => console.log('Cogni Fathom Agent rodando na porta ' + PORT));
